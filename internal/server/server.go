@@ -28,6 +28,7 @@ func New(db *sql.DB, static fs.FS) http.Handler {
 	m.HandleFunc("POST /api/saved", api(s.addSavedLink))
 	m.HandleFunc("DELETE /api/saved/{id}", api(s.deleteSavedLink))
 	m.HandleFunc("GET /api/backup", s.backup)
+	m.HandleFunc("POST /api/import-access", s.importAccess)
 	m.HandleFunc("GET /api/preferences", api(s.preferences))
 	m.HandleFunc("PUT /api/preferences/{key}", api(s.setPreference))
 	m.HandleFunc("GET /api/menus", api(s.menus))

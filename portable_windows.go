@@ -101,7 +101,12 @@ func portable() error {
 		return err
 	}
 	token := hex.EncodeToString(key[:])
-	app := server.NewMulti([]server.Database{{Name: "Diet Pro", DB: db}}, web.Dist())
+	databases := []server.Database{{Name: "Diet Pro", DB: db}}
+	for _, imported := range openImportedDatabases(folder) {
+		databases = append(databases, imported)
+		defer imported.DB.Close()
+	}
+	app := server.NewMulti(databases, web.Dist())
 	stopped := make(chan struct{}, 1)
 	var lastSeen atomic.Int64
 	lastSeen.Store(time.Now().Unix())
@@ -168,6 +173,28 @@ func portable() error {
 			}
 		}
 	}
+}
+
+func openImportedDatabases(folder string) []server.Database {
+	entries, err := os.ReadDir(folder)
+	if err != nil {
+		return nil
+	}
+	var databases []server.Database
+	for _, entry := range entries {
+		name := strings.ToLower(entry.Name())
+		if !entry.Type().IsRegular() || !strings.HasPrefix(name, "dietpro-imported") || !strings.HasSuffix(name, ".db") {
+			continue
+		}
+		path := filepath.Join(folder, entry.Name())
+		if ok, _ := store.IsDietPro(path); !ok {
+			continue
+		}
+		if db, err := store.Open(path); err == nil {
+			databases = append(databases, server.Database{Name: dbName(path), DB: db})
+		}
+	}
+	return databases
 }
 
 func launchPortableDefault() bool {
