@@ -37,6 +37,8 @@ export function Help() {
     <p>Browse Cookbooks or search by recipe name. Open a recipe to view its ingredients, instructions, and nutrition. Grocery Lists lets you create, rename, and print checklists. Recipes and meal plans send items to the currently selected list.</p>
     <h2>Exercise and Reports</h2>
     <p>In Profile → Exercise, select an activity and enter its duration. If you have recorded your weight, Diet Pro can estimate calories burned. Reports shows recent calorie and weight history.</p>
+    <h2>Importing a Diet Pro 2005 database</h2>
+    <p>Open <Link to="/import-access">File → Import legacy database</Link> and choose the original .mdb. Save DietPro-imported.db beside DietPro.exe, relaunch, and select it from the Database selector.</p>
     <h2>Moving your data</h2>
     <p>Use File → Exit Diet Pro before copying the executable and DietPro.db together to another writable folder. First launch in a folder without a database starts with the bundled catalog. File → Back up database saves a copy that includes your committed changes. To open a backup, copy DietPro.exe into a fresh folder and place the backup beside it under the name DietPro.db.</p>
     <h2>Original manual</h2>

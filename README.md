@@ -21,6 +21,19 @@ To build this edition from a local Diet Pro CSV export, run
 imported catalog without tracking the generated database or source CSV files
 in Git.
 
+### Import a Diet Pro 2005 database
+
+Open **File → Import legacy database**, choose the original .mdb, and convert
+it. Save DietPro-imported.db next to the executable, relaunch Diet Pro, and
+select DietPro-imported from the Database selector. Your original .mdb and
+your existing DietPro.db remain separate. You can also put the converted
+database beside a copy of the executable in a separate folder and rename it
+DietPro.db to make that data the default.
+
+Direct .mdb import uses the Windows 32-bit Jet or Access database provider.
+External image files are separate from the .mdb and need to be retained
+with your legacy backup.
+
 **Contents**
 
 1. [Running Diet Pro (no programming needed)](#1-running-diet-pro-no-programming-needed)

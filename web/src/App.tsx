@@ -13,6 +13,7 @@ import FoodEdit from "./pages/FoodEdit";
 import DiaryPage from "./pages/Diary";
 import ProfilesPage from "./pages/Profiles";
 import PhotographsPage from "./pages/Photographs";
+import ImportAccessPage from "./pages/ImportAccess";
 import MenusPage from "./pages/Menus";
 import SavedLinksPage from "./pages/SavedLinks";
 import ReferencePage from "./pages/Reference";
@@ -134,7 +135,7 @@ export default function App() {
     <MetaContext.Provider value={meta}>
       <div className="diet-workspace">
         <div className="desktop-menubar" aria-label="Application menu">
-          <details><summary>File</summary><div><NavLink to="/profiles">Manage profiles</NavLink><button onClick={() => window.print()}>Print</button><a href={"/api/backup?db=" + encodeURIComponent(dbs!.current)} download>Back up database</a><button onClick={exit}>Exit Diet Pro</button></div></details>
+          <details><summary>File</summary><div><NavLink to="/profiles">Manage profiles</NavLink><NavLink to="/import-access">Import legacy database</NavLink><button onClick={() => window.print()}>Print</button><a href={"/api/backup?db=" + encodeURIComponent(dbs!.current)} download>Back up database</a><button onClick={exit}>Exit Diet Pro</button></div></details>
           <details><summary>View</summary><div>{Object.entries(SECTIONS).map(([name, entries]) => <NavLink key={name} to={entries[0][1]}>{name}</NavLink>)}</div></details>
           <details><summary>Help</summary><div><NavLink to="/help">Contents and Index</NavLink></div></details>
         </div>
@@ -230,6 +231,7 @@ export default function App() {
             <Route path="/menus" element={<MenusPage />} />
             <Route path="/internet" element={<Internet />} />
             <Route path="/help" element={<Help />} />
+            <Route path="/import-access" element={<ImportAccessPage />} />
             <Route path="/recipes" element={<RecipesPage />} />
             <Route path="/recipes/new" element={<RecipeEdit />} />
             <Route path="/recipes/:id" element={<RecipeView />} />
@@ -245,7 +247,7 @@ export default function App() {
             <Route path="*" element={<div className="state">Page not found.</div>} />
           </Routes>
           </div>
-          <div className="workspace-status"><span>{active?.[0] ?? "Help"}</span><span>{meta.counts.recipes.toLocaleString()} recipes · {meta.counts.foods.toLocaleString()} ingredients</span></div>
+          <div className="workspace-status"><span>{active?.[0] ?? (loc.pathname === "/import-access" ? "Import legacy database" : "Help")}</span><span>{meta.counts.recipes.toLocaleString()} recipes · {meta.counts.foods.toLocaleString()} ingredients</span></div>
         </main>
         </div>
       </div>
