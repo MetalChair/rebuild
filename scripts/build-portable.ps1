@@ -4,7 +4,7 @@ Builds DietPro.exe with an embedded catalog from a local Diet Pro CSV export.
 .EXAMPLE
 ./scripts/build-portable.ps1 -CsvDir 'C:/DietPro/DietProExport' -ImagesDir 'C:/DietPro/Images'
 .NOTES
-Run on Windows with Go, Node.js, npm, and a local export of the legacy t_*.csv tables.
+Run on Windows with Go, Node.js 22.12 or newer, npm, and a local export of the legacy t_*.csv tables.
 #>
 [CmdletBinding()]
 param(
