@@ -65,7 +65,7 @@ export function CaloriesChart({ days, budget, onPick }: { days: SummaryDay[]; bu
   const [hover, setHover] = useState<number | null>(null);
   const max = niceMax(Math.max(budget ?? 0, ...days.map((d) => d.calories ?? 0)) * 1.05);
   const band = plotW / days.length;
-  const barW = Math.max(4, Math.min(28, band - 2));
+  const barW = Math.min(28, Math.max(1, band * 0.78));
   const x = (i: number) => PAD.left + band * i + band / 2;
   const y = (v: number) => PAD.top + plotH - (v / max) * plotH;
   const ticks = [0, max / 2, max];

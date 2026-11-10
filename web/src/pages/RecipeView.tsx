@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, mediaURL, type Recipe } from "../api";
+import { api, mediaURL, type Recipe, dbKey } from "../api";
 import { MacroSplit, NutrientTable, NutritionFacts } from "../components/Nutrition";
 import { ErrorBox, Field, Icon, Modal, NumberInput, Spinner } from "../components/ui";
+import { groceryIngredients } from "../grocery";
 import { useMeta } from "../meta";
 import { fmt, fmtMinutes, isoDate, scaleQuantity, useAsync, useLocalStorage } from "../util";
 
@@ -11,6 +12,9 @@ export default function RecipeView() {
   const nav = useNavigate();
   const recipe = useAsync(() => api.recipe(id), [id]);
   const [servings, setServings] = useState<number | null>(null);
+  const [groceryList] = useLocalStorage(dbKey("dp.groceryList"), 1);
+  const [shopping, setShopping] = useState(false);
+  const [shoppingError, setShoppingError] = useState("");
   const [logging, setLogging] = useState(false);
   const [tab, setTab] = useState<"label" | "all">("label");
 
@@ -20,6 +24,19 @@ export default function RecipeView() {
   const target = servings ?? r.servings;
   const factor = target / r.servings;
   const n = r.nutrition;
+
+  const addToShopping = async () => {
+    setShopping(true);
+    setShoppingError("");
+    try {
+      await api.addGroceries(groceryList, groceryIngredients(r, target));
+      nav("/shopping");
+    } catch (error) {
+      setShoppingError(String(error));
+    } finally {
+      setShopping(false);
+    }
+  };
 
   const remove = async () => {
     if (!confirm(`Delete "${r.name}"? This cannot be undone.`)) return;
@@ -72,10 +89,12 @@ export default function RecipeView() {
             <Link className="btn" to={`/recipes/${r.id}/edit`}>
               <Icon name="edit" /> Edit
             </Link>
+            <button className="btn" disabled={shopping || !r.ingredients.some(i => !i.is_heading && i.text.trim())} onClick={addToShopping}>Add ingredients to groceries</button>
             <button className="btn btn-ghost danger" onClick={remove}>
               <Icon name="trash" /> Delete
             </button>
           </div>
+          {shoppingError && <ErrorBox error={shoppingError} />}
         </div>
       </header>
 
@@ -236,7 +255,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 function LogRecipe({ recipe, servings: initial, onClose }: { recipe: Recipe; servings: number; onClose: () => void }) {
   const meta = useMeta();
   const profiles = useAsync(() => api.profiles(), []);
-  const [pid, setPid] = useLocalStorage<number | null>("dp.profile", null);
+  const [pid, setPid] = useLocalStorage<number | null>(dbKey("dp.profile"), null);
   const [date, setDate] = useState(isoDate(new Date()));
   const [meal, setMeal] = useState(meta.meals.find((m) => m.name === "Dinner")?.id ?? meta.meals[0]?.id ?? 1);
   const [servings, setServings] = useState<number | null>(Math.round(initial * 100) / 100);

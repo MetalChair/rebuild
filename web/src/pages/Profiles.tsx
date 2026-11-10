@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { api, type Profile } from "../api";
+import { Link, useSearchParams } from "react-router-dom";
+import { api, type Profile, dbKey } from "../api";
 import { ErrorBox, Field, Icon, NumberInput, Spinner } from "../components/ui";
 import { fmt, isoDate, kgToLb, lbToKg, useAsync, useLocalStorage } from "../util";
 
@@ -30,20 +30,31 @@ const blank = (): Profile => ({
 
 export default function ProfilesPage() {
   const profiles = useAsync(() => api.profiles(), []);
-  const [activeId, setActiveId] = useLocalStorage<number | null>("dp.profile", null);
+  const [activeId, setActiveId] = useLocalStorage<number | null>(dbKey("dp.profile"), null);
+  const [params, setParams] = useSearchParams();
+  const selectedId = Number(params.get("profile")) || activeId;
+  const select = (id: number | null) => {
+    setActiveId(id);
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (id) next.set("profile", String(id));
+      else next.delete("profile");
+      return next;
+    }, { replace: true });
+  };
   const [creating, setCreating] = useState(false);
 
   if (profiles.loading && !profiles.data) return <Spinner />;
   if (profiles.error) return <ErrorBox error={profiles.error} onRetry={profiles.reload} />;
   const list = profiles.data ?? [];
-  const selected = creating ? blank() : list.find((p) => p.id === activeId) ?? list[0] ?? blank();
+  const selected = creating ? blank() : list.find((p) => p.id === selectedId) ?? list[0] ?? blank();
   const isNew = selected.id === 0;
 
   return (
     <div className="content content-narrow">
       <div className="page-head">
         <div>
-          <h1>Profiles</h1>
+          <h1>{params.get("view") === "goals" ? "Goals" : "Profiles"}</h1>
           <p className="muted">Each profile keeps its own diary, weight log and calorie budget.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>
@@ -53,7 +64,7 @@ export default function ProfilesPage() {
       {list.length > 0 && (
         <div className="chips">
           {list.map((p) => (
-            <button key={p.id} className={"chip" + (!creating && p.id === selected.id ? " chip-on" : "")} onClick={() => (setActiveId(p.id), setCreating(false))}>
+            <button key={p.id} className={"chip" + (!creating && p.id === selected.id ? " chip-on" : "")} onClick={() => (select(p.id), setCreating(false))}>
               {p.name}
             </button>
           ))}
@@ -64,11 +75,11 @@ export default function ProfilesPage() {
         profile={selected}
         onSaved={(p) => {
           setCreating(false);
-          setActiveId(p.id);
+          select(p.id);
           profiles.reload();
         }}
         onDeleted={() => {
-          setActiveId(null);
+          select(null);
           profiles.reload();
         }}
       />

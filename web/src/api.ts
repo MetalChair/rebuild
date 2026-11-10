@@ -262,8 +262,49 @@ export class ApiError extends Error {
   }
 }
 
+// --- Database selection -------------------------------------------------------
+// The server can serve several databases (`dietpro serve -dir`). Each browser
+// tab remembers its own choice in sessionStorage and names it on every request,
+// so two tabs can work on different databases without crossing over.
+
+const DB_KEY = "dp.db";
+let currentDB = "";
+
+export interface Databases {
+  databases: string[];
+  current: string;
+}
+
+/** Fetch the available databases and settle which one this tab uses. Call before any other request. */
+export async function initDatabases(): Promise<Databases> {
+  const res = await fetch("/api/databases");
+  if (!res.ok) throw new ApiError(res.status, "Could not list databases");
+  const d: { databases: string[]; default: string } = await res.json();
+  let saved: string | null = null;
+  try {
+    saved = sessionStorage.getItem(DB_KEY);
+  } catch {
+    /* storage unavailable: use the default */
+  }
+  currentDB = saved && d.databases.includes(saved) ? saved : d.default;
+  return { databases: d.databases, current: currentDB };
+}
+
+export const currentDatabase = () => currentDB;
+
+/** Switch this tab to another database and reload the app from its start page. */
+export function switchDatabase(name: string) {
+  try {
+    sessionStorage.setItem(DB_KEY, name);
+  } catch {
+    /* storage unavailable */
+  }
+  location.assign("/");
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, headers: {} };
+  if (currentDB) (init.headers as Record<string, string>)["X-Diet-Pro-DB"] = encodeURIComponent(currentDB);
   if (body instanceof Blob) {
     init.body = body;
   } else if (body !== undefined) {
@@ -284,7 +325,52 @@ const qs = (params: Record<string, string | number | undefined | null>) => {
   return s ? "?" + s : "";
 };
 
+export interface PantryItem extends Named {
+  quantity: number;
+  unit: string;
+  comments: string;
+}
+
+export interface MenuRecord extends Named {
+  comments: string;
+  servings: number;
+  lines: { id: number; name: string; kind: string; recipe_id: number | null; food_id: number | null; quantity: string }[];
+}
+
+export interface ProfilePhoto {
+  id: number;
+  date: string;
+  caption: string;
+}
+
+export const profilePhotoURL = (profile: number, photo: number) =>
+  "/api/profiles/" + profile + "/photographs/" + photo + qs({ db: currentDB });
+
 export const api = {
+  profilePhotos: (profile: number) => request<ProfilePhoto[]>("GET", "/api/profiles/" + profile + "/photographs"),
+  addProfilePhoto: (profile: number, date: string, caption: string, file: File) =>
+    request<ProfilePhoto>("POST", "/api/profiles/" + profile + "/photographs" + qs({ date, caption }), file),
+  deleteProfilePhoto: (profile: number, photo: number) =>
+    request<void>("DELETE", "/api/profiles/" + profile + "/photographs/" + photo),
+  preferences: () => request<Record<string, unknown>>("GET", "/api/preferences"),
+  setPreference: (key: string, value: unknown) => request<void>("PUT", "/api/preferences/" + encodeURIComponent(key), value),
+  pantry: () => request<PantryItem[]>("GET", "/api/pantry"),
+  updatePantry: (id: number, quantity: number) => request<void>("PUT", "/api/pantry/" + id, { quantity }),
+  menus: () => request<MenuRecord[]>("GET", "/api/menus"),
+  saveMenu: (menu: MenuRecord) => menu.id
+    ? request<MenuRecord>("PUT", "/api/menus/" + menu.id, menu)
+    : request<MenuRecord>("POST", "/api/menus", menu),
+  deleteMenu: (id: number) => request<void>("DELETE", "/api/menus/" + id),
+  stores: () => request<(Named & { address: string; comments: string })[]>("GET", "/api/stores"),
+  groceryLists: () => request<Named[]>("GET", "/api/grocery-lists"),
+  createGroceryList: (name: string) => request<Named>("POST", "/api/grocery-lists", {name}),
+  renameGroceryList: (id: number, name: string) => request<Named>("PUT", "/api/grocery-lists/" + id, {name}),
+  deleteGroceryList: (id: number) => request<void>("DELETE", "/api/grocery-lists/" + id),
+  groceries: (list: number) => request<{ id: number; name: string; quantity: string; checked: boolean }[]>("GET", "/api/groceries" + qs({list})),
+  addGrocery: (list: number, name: string, quantity: string) => request<void>("POST", "/api/groceries" + qs({list}), [{name, quantity}]),
+  addGroceries: (list: number, items: { name: string; quantity: string }[]) => request<void>("POST", "/api/groceries" + qs({list}), items),
+  checkGrocery: (id: number, checked: boolean) => request<void>("PUT", `/api/groceries/${id}`, {checked}),
+  deleteGrocery: (id: number) => request<void>("DELETE", `/api/groceries/${id}`),
   meta: () => request<Meta>("GET", "/api/meta"),
 
   cookbooks: () => request<Cookbook[]>("GET", "/api/cookbooks"),
@@ -328,4 +414,8 @@ export const api = {
   technique: (id: number) => request<Technique>("GET", `/api/techniques/${id}`),
 };
 
-export const mediaURL = (name: string) => (name ? `/media/${encodeURIComponent(name)}` : "");
+export const mediaURL = (name: string) =>
+  name ? `/media/${encodeURIComponent(name)}` + (currentDB ? `?db=${encodeURIComponent(currentDB)}` : "") : "";
+
+/** localStorage key for a setting that belongs to the current database (e.g. the selected profile). */
+export const dbKey = (key: string) => (currentDB ? `${key}:${currentDB}` : key);

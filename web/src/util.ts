@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { api } from "./api";
 
 const UNICODE_FRACTIONS: Record<string, string> = {
   "½": " 1/2", "⅓": " 1/3", "⅔": " 2/3", "¼": " 1/4", "¾": " 3/4", "⅛": " 1/8", "⅜": " 3/8", "⅝": " 5/8", "⅞": " 7/8",
@@ -123,22 +124,55 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { ...state, reload: run, setData: (data: T) => setState({ data, loading: false }) };
 }
 
+const preferenceChanged = "dietpro:preferences";
+let preferences: Record<string, unknown> = {};
+let portablePreferences = false;
+const pendingPreferences = new Map<string, Promise<void>>();
+
+export async function initPreferences() {
+  try {
+    preferences = await api.preferences();
+    portablePreferences = true;
+    window.dispatchEvent(new Event(preferenceChanged));
+  } catch {
+    portablePreferences = false;
+  }
+}
+
 export function useLocalStorage<T>(key: string, initial: T): [T, (v: T) => void] {
-  const [v, setV] = useState<T>(() => {
+  const read = () => {
+    if (portablePreferences && Object.prototype.hasOwnProperty.call(preferences, key)) return preferences[key] as T;
     try {
-      const s = localStorage.getItem(key);
-      return s === null ? initial : (JSON.parse(s) as T);
+      const stored = localStorage.getItem(key);
+      return stored === null ? initial : JSON.parse(stored) as T;
     } catch {
       return initial;
     }
-  });
-  const set = (nv: T) => {
-    setV(nv);
-    try {
-      localStorage.setItem(key, JSON.stringify(nv));
-    } catch {
-      /* storage unavailable */
-    }
   };
-  return [v, set];
+  const [value, setValue] = useState<T>(read);
+  useEffect(() => {
+    const refresh = () => setValue(read());
+    refresh();
+    window.addEventListener(preferenceChanged, refresh);
+    return () => window.removeEventListener(preferenceChanged, refresh);
+  }, [key]);
+  function set(next: T) {
+    setValue(next);
+    try {
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      // The database can still save the preference when browser storage is unavailable.
+    }
+    if (!portablePreferences) return;
+    preferences[key] = next;
+    window.dispatchEvent(new Event(preferenceChanged));
+    const write = (pendingPreferences.get(key) ?? Promise.resolve())
+      .then(() => api.setPreference(key, next))
+      .catch(() => undefined)
+      .finally(() => {
+        if (pendingPreferences.get(key) === write) pendingPreferences.delete(key);
+      });
+    pendingPreferences.set(key, write);
+  }
+  return [value, set];
 }

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, mediaURL, type Cookbook, type CookbookGroup, type RecipeSummary } from "../api";
 import { Empty, ErrorBox, Icon, Spinner } from "../components/ui";
 import { useMeta } from "../meta";
-import { fmt, fmtMinutes, useAsync, useDebounced } from "../util";
+import { fmt, fmtMinutes, useAsync, useDebounced, useLocalStorage } from "../util";
 
 const PAGE = 48;
 
@@ -15,6 +15,7 @@ export default function RecipesPage() {
   const cookbook = params.get("cookbook") ? Number(params.get("cookbook")) : undefined;
   const type = params.get("type") ?? "";
   const sort = params.get("sort") ?? "name";
+  const [layout, setLayout] = useLocalStorage<"list" | "cards">("dp.recipeLayout", "list");
   const [text, setText] = useState(q);
   const dq = useDebounced(text, 250);
   const books = useAsync(() => api.cookbooks(), []);
@@ -94,6 +95,10 @@ export default function RecipesPage() {
               </option>
             ))}
           </select>
+          <select value={layout} aria-label="Recipe layout" onChange={e => setLayout(e.target.value === "cards" ? "cards" : "list")}>
+            <option value="list">List view</option>
+            <option value="cards">Card view</option>
+          </select>
           <select value={sort} onChange={(e) => set({ sort: e.target.value === "name" ? undefined : e.target.value })} aria-label="Sort">
             <option value="name">A–Z</option>
             <option value="recent">Recently updated</option>
@@ -102,11 +107,16 @@ export default function RecipesPage() {
         </div>
         {error && <ErrorBox error={error} onRetry={() => load(0)} />}
         {!loading && !error && items.length === 0 && <Empty>No recipes match these filters.</Empty>}
-        <div className="card-grid">
-          {items.map((r) => (
-            <RecipeCard key={r.id} r={r} />
-          ))}
-        </div>
+        {layout === "list" ? <table className="workspace-grid recipe-list">
+          <thead><tr><th>Recipe Name</th><th>Type</th><th>Calories</th></tr></thead>
+          <tbody>{items.map(r => <tr key={r.id}>
+            <td><Link to={"/recipes/" + r.id}>{r.name}</Link></td>
+            <td>{r.types}</td>
+            <td>{r.calories === null ? "—" : fmt(r.calories) + " kcal"}</td>
+          </tr>)}</tbody>
+        </table> : <div className="card-grid">
+          {items.map(r => <RecipeCard key={r.id} r={r} />)}
+        </div>}
         {loading && <Spinner />}
         {!loading && items.length < total && (
           <div className="center">

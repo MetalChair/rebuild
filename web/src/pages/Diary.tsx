@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { api, type Activity, type Day, type DayEntry, type EntryInput, type Food, type Profile, type RecipeSummary } from "../api";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { api, type Activity, type Day, type DayEntry, type EntryInput, type Food, type Profile, type RecipeSummary, dbKey } from "../api";
 import { CaloriesChart, WeightChart } from "../components/Charts";
 import { FoodPicker } from "../components/FoodPicker";
 import { MacroSplit, NutrientTable } from "../components/Nutrition";
 import { Empty, ErrorBox, Field, Icon, Modal, NumberInput, Spinner } from "../components/ui";
+import { groceryIngredients } from "../grocery";
 import { useMeta } from "../meta";
 import { addDays, fmt, isoDate, kgToLb, lbToKg, longDate, useAsync, useDebounced, useLocalStorage } from "../util";
 
@@ -12,10 +13,16 @@ const CORE_MEALS = ["Breakfast", "Lunch", "Dinner"];
 
 export default function DiaryPage() {
   const profiles = useAsync(() => api.profiles(), []);
-  const [pid, setPid] = useLocalStorage<number | null>("dp.profile", null);
+  const [pid, setPid] = useLocalStorage<number | null>(dbKey("dp.profile"), null);
   const [params, setParams] = useSearchParams();
   const date = params.get("date") ?? isoDate(new Date());
-  const setDate = (d: string) => setParams({ date: d }, { replace: true });
+  const view = params.get("view") ?? "diary";
+  const title = ({ calendar: "Calendar", meals: "Meal Plan", exercise: "Exercise", reports: "Reports" } as Record<string, string>)[view] ?? "Diary";
+  const setDate = (d: string) => setParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.set("date", d);
+    return next;
+  }, { replace: true });
 
   if (profiles.loading) return <Spinner />;
   if (profiles.error) return <ErrorBox error={profiles.error} onRetry={profiles.reload} />;
@@ -23,7 +30,7 @@ export default function DiaryPage() {
   if (list.length === 0)
     return (
       <div className="content content-narrow">
-        <h1>Diary</h1>
+        <h1>{title}</h1>
         <Empty>
           The diary tracks what a profile eats each day. <Link to="/profiles">Create a profile</Link> to start.
         </Empty>
@@ -34,7 +41,7 @@ export default function DiaryPage() {
   return (
     <div className="content">
       <div className="page-head diary-head">
-        <h1>Diary</h1>
+        <h1>{title}</h1>
         <div className="row wrap">
           {list.length > 1 && (
             <select value={profile.id} onChange={(e) => setPid(Number(e.target.value))} aria-label="Profile">
@@ -59,15 +66,46 @@ export default function DiaryPage() {
           </div>
         </div>
       </div>
-      <DayView key={profile.id + date} profile={profile} date={date} onPickDate={setDate} />
+      {view === "calendar"
+        ? <Calendar date={date} onPickDate={setDate} />
+        : <DayView key={profile.id + date + view} profile={profile} date={date} onPickDate={setDate} view={view} />}
     </div>
   );
 }
 
-function DayView({ profile, date, onPickDate }: { profile: Profile; date: string; onPickDate: (d: string) => void }) {
+function Calendar({ date, onPickDate }: { date: string; onPickDate: (d: string) => void }) {
+  const start = date.slice(0, 8) + "01";
+  const first = new Date(start + "T12:00:00");
+  const month = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const prev = new Date(first.getFullYear(), first.getMonth() - 1, 1, 12);
+  const next = new Date(first.getFullYear(), first.getMonth() + 1, 1, 12);
+  const length = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return <section className="panel content-narrow">
+    <div className="panel-head">
+      <button className="btn" onClick={() => onPickDate(isoDate(prev))}>Previous month</button>
+      <h2>{month}</h2>
+      <button className="btn" onClick={() => onPickDate(isoDate(next))}>Next month</button>
+    </div>
+    <div className="calendar-grid">
+      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => <strong key={d}>{d}</strong>)}
+      {Array.from({ length: first.getDay() }, (_, i) => <span key={"blank" + i} />)}
+      {Array.from({ length }, (_, i) => {
+        const day = addDays(start, i);
+        return <button className="btn" key={day} aria-pressed={day === date} aria-label={longDate(day)} onClick={() => onPickDate(day)}>{i + 1}</button>;
+      })}
+    </div>
+    <p><Link to={"/diary?view=meals&date=" + date}>Open meal plan for {longDate(date)}</Link></p>
+  </section>;
+}
+
+function DayView({ profile, date, onPickDate, view }: { profile: Profile; date: string; onPickDate: (d: string) => void; view: string }) {
   const meta = useMeta();
+  const navigate = useNavigate();
+  const [groceryList] = useLocalStorage(dbKey("dp.groceryList"), 1);
+  const [shopping, setShopping] = useState(false);
   const day = useAsync(() => api.day(profile.id, date), [profile.id, date]);
-  const summary = useAsync(() => api.summary(profile.id, date, 14), [profile.id, date, day.data]);
+  const [reportDays, setReportDays] = useLocalStorage("dp.reportDays", 14);
+  const summary = useAsync(() => api.summary(profile.id, date, reportDays), [profile.id, date, day.data, reportDays]);
   const [units, setUnits] = useLocalStorage<"lb" | "kg">("dp.units", "lb");
   const [adding, setAdding] = useState<number | null>(null);
   const [editing, setEditing] = useState<DayEntry | null>(null);
@@ -94,11 +132,33 @@ function DayView({ profile, date, onPickDate }: { profile: Profile; date: string
   const meals = meta.meals.filter((m) => CORE_MEALS.includes(m.name) || d.entries.some((e) => e.meal_id === m.id));
   const toUnit = (kg: number) => (units === "lb" ? kgToLb(kg) : kg);
 
+  async function sendMealToGroceries(entries: DayEntry[]) {
+    setError(undefined);
+    setShopping(true);
+    try {
+      const rows = await Promise.all(entries.map(async entry => {
+        if (entry.kind === "recipe" && entry.recipe_id) {
+          const recipe = await api.recipe(entry.recipe_id);
+          const ingredients = groceryIngredients(recipe, entry.servings ?? recipe.servings);
+          if (ingredients.length) return ingredients;
+        }
+        if (entry.kind !== "text") return [{ name: entry.name, quantity: describeAmount(entry) }];
+        return [];
+      }));
+      await api.addGroceries(groceryList, rows.flat());
+      navigate("/shopping");
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setShopping(false);
+    }
+  }
+
   return (
     <>
       <p className="muted day-title">{longDate(date)}</p>
       {error && <ErrorBox error={error} />}
-      <section className="summary panel">
+      <section className="summary panel" hidden={view === "exercise"}>
         <div className="summary-stats">
           <Stat label="Budget" value={budget === null ? "–" : fmt(budget)} hint={budget === null ? "Set one in Profiles" : d.profile.budget_mode === "automatic" ? "automatic" : undefined} />
           <Stat label="Eaten" value={fmt(eaten)} />
@@ -113,8 +173,8 @@ function DayView({ profile, date, onPickDate }: { profile: Profile; date: string
         <MacroSplit values={d.totals} />
       </section>
 
-      <div className="diary-cols">
-        <div>
+      <div className="diary-cols" hidden={view === "reports"}>
+        <div hidden={view === "exercise"}>
           {meals.map((m) => {
             const entries = d.entries.filter((e) => e.meal_id === m.id);
             const kcal = entries.reduce((s, e) => s + (e.nutrients.calories ?? 0), 0);
@@ -145,6 +205,9 @@ function DayView({ profile, date, onPickDate }: { profile: Profile; date: string
                 <button className="btn btn-sm btn-ghost add-btn" onClick={() => setAdding(m.id)}>
                   <Icon name="plus" /> Add food
                 </button>
+                {entries.some(entry => entry.kind !== "text") && (
+                  <button className="btn btn-sm btn-ghost" disabled={shopping} onClick={() => sendMealToGroceries(entries)}>Add meal to groceries</button>
+                )}
               </section>
             );
           })}
@@ -165,7 +228,7 @@ function DayView({ profile, date, onPickDate }: { profile: Profile; date: string
           </div>
         </div>
 
-        <div>
+        <div hidden={view === "meals"}>
           <section className="panel">
             <div className="panel-head">
               <h2>Exercise</h2>
@@ -221,11 +284,27 @@ function DayView({ profile, date, onPickDate }: { profile: Profile; date: string
         </div>
       </div>
 
-      <section className="panel">
+      <section className="panel" hidden={view === "meals" || view === "exercise"}>
         <div className="panel-head">
-          <h2>Last 14 days</h2>
-          <span className="muted small">Click a bar to open that day.</span>
+          <h2>Last {reportDays} days</h2>
+          <div className="row wrap">
+            <select aria-label="Report period" value={reportDays} onChange={e => setReportDays(Number(e.target.value))}>
+              {[7, 14, 30, 90].map(n => <option key={n} value={n}>{n} days</option>)}
+            </select>
+            <button className="btn btn-sm" disabled={!summary.data || summary.loading} onClick={() => {
+              if (!summary.data) return;
+              const data = ["Date,Calories eaten,Calories burned,Weight (" + units + ")",
+                ...summary.data.map(row => [row.date, row.calories ?? "", row.burned, row.weight_kg == null ? "" : toUnit(row.weight_kg).toFixed(2)].join(","))].join("\r\n");
+              const url = URL.createObjectURL(new Blob([data], { type: "text/csv" }));
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "DietPro-report-" + date + ".csv";
+              link.click();
+              window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}>Export CSV</button>
+          </div>
         </div>
+        {summary.error && <ErrorBox error={summary.error} onRetry={summary.reload} />}
         {summary.data && (
           <div className="charts">
             <CaloriesChart days={summary.data} budget={budget} onPick={onPickDate} />
@@ -234,7 +313,7 @@ function DayView({ profile, date, onPickDate }: { profile: Profile; date: string
         )}
       </section>
 
-      <section className="panel">
+      <section className="panel" hidden={view === "exercise"}>
         <div className="panel-head">
           <h2>Nutrient totals</h2>
           <button className="btn btn-sm btn-ghost" onClick={() => setShowAll(!showAll)} aria-expanded={showAll}>
