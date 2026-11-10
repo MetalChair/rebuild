@@ -1,3 +1,4 @@
+import { SaveSearch } from "./SavedLinks";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type FoodGroup, type FoodSummary } from "../api";
@@ -67,6 +68,7 @@ export default function FoodsPage() {
         </Link>
       </div>
       <div className="toolbar">
+          <SaveSearch section="cooking" title={q || "Ingredient search"} />
         <div className="search">
           <Icon name="search" />
           <input type="search" placeholder="Search, e.g. “cheddar” or “chicken breast roasted”" value={text} onChange={(e) => setText(e.target.value)} aria-label="Search ingredients" autoFocus />

@@ -5,6 +5,22 @@ Windows app) as a single self-contained binary: a Go server with an embedded
 React UI and an SQLite database file. No runtime dependencies, no cgo, no
 internet connection required.
 
+## Portable Windows edition
+
+Use the portable Windows executable in the release tag's dist folder. Copy
+it to a writable folder and double-click it. It opens in Microsoft Edge app
+mode, with the default browser as a fallback. The catalog is embedded.
+On first run, Diet Pro creates DietPro.db next to the executable. It keeps
+your profiles, meal plans, photographs, shopping lists, and settings there.
+Exit through File → Exit Diet Pro before moving the executable and database.
+File → Back up database downloads a snapshot of your saved data.
+
+To build this edition from a local Diet Pro CSV export, run
+`./scripts/build-portable.ps1 -CsvDir <export-folder>` and supply
+`-ImagesDir <images-folder>` to include catalog images. The script bundles the
+imported catalog without tracking the generated database or source CSV files
+in Git.
+
 **Contents**
 
 1. [Running Diet Pro (no programming needed)](#1-running-diet-pro-no-programming-needed)

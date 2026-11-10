@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, dbKey, type Named } from "../api";
 import { ErrorBox, Modal, Spinner } from "../components/ui";
 import { useAsync, useLocalStorage } from "../util";
+import { SaveLinkButton, SaveSearch } from "./SavedLinks";
 
 export function Home() {
   return <article className="content workspace-home">
@@ -51,16 +52,20 @@ export function Internet() {
 }
 
 export function Activities() {
-  const [query, setQuery] = useState("");
+  const [params, setParams] = useSearchParams();
+  const query = params.get("q") ?? "";
+  const setQuery = (q: string) => setParams(q ? {q} : {}, {replace: true});
   const activities = useAsync(() => api.activities(""), []);
   const rows = (activities.data ?? []).filter(a => a.name.toLowerCase().includes(query.trim().toLowerCase()));
   return <section className="content content-narrow">
-    <div className="page-head"><h1>Activities</h1><Link className="btn" to="/diary?view=exercise">Record exercise</Link></div>
+    <div className="page-head"><h1>Activities</h1><SaveSearch section="exercise" title={query} /><Link className="btn" to="/diary?view=exercise">Record exercise</Link></div>
     <input type="search" value={query} onChange={e => setQuery(e.target.value)} aria-label="Filter activities" placeholder="Find an activity…" />
     {activities.loading && <Spinner />}
     {activities.error && <ErrorBox error={activities.error} />}
-    <table className="workspace-grid"><thead><tr><th>Activity Name</th></tr></thead><tbody>
-      {rows.map(activity => <tr key={activity.id}><td>{activity.name}</td></tr>)}
+    <table className="workspace-grid"><thead><tr><th>Activity Name</th><th>Favorite</th></tr></thead><tbody>
+      {rows.map(activity => <tr key={activity.id}><td>{activity.name}</td><td>
+        <SaveLinkButton compact record={{ section: "exercise", kind: "favorite", title: activity.name, target: "/activities?q=" + encodeURIComponent(activity.name) }} />
+      </td></tr>)}
     </tbody></table>
     <p className="muted">{rows.length} records</p>
   </section>;

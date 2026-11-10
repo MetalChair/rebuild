@@ -346,7 +346,19 @@ export interface ProfilePhoto {
 export const profilePhotoURL = (profile: number, photo: number) =>
   "/api/profiles/" + profile + "/photographs/" + photo + qs({ db: currentDB });
 
+export interface SavedLink {
+  id: number;
+  section: "cooking" | "exercise";
+  kind: "favorite" | "search";
+  title: string;
+  target: string;
+}
+
 export const api = {
+  savedLinks: (section: SavedLink["section"], kind: SavedLink["kind"]) =>
+    request<SavedLink[]>("GET", "/api/saved" + qs({section, kind})),
+  saveLink: (record: Omit<SavedLink, "id">) => request<SavedLink>("POST", "/api/saved", record),
+  deleteLink: (id: number) => request<void>("DELETE", "/api/saved/" + id),
   profilePhotos: (profile: number) => request<ProfilePhoto[]>("GET", "/api/profiles/" + profile + "/photographs"),
   addProfilePhoto: (profile: number, date: string, caption: string, file: File) =>
     request<ProfilePhoto>("POST", "/api/profiles/" + profile + "/photographs" + qs({ date, caption }), file),

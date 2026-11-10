@@ -50,6 +50,7 @@ func (s *srv) addSavedLink(r *http.Request) (any, error) {
 	if err != nil || target.IsAbs() || target.Host != "" || !validSavedTarget(item.Section, item.Kind, target) {
 		return nil, badRequest("choose a Diet Pro item or search")
 	}
+	target.RawPath = ""
 	target.RawQuery = target.Query().Encode()
 	item.Target = target.String()
 	err = s.db.QueryRowContext(r.Context(), `INSERT INTO saved_link(section, kind, title, target) VALUES(?, ?, ?, ?)

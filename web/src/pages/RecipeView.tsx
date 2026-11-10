@@ -1,3 +1,4 @@
+import { SaveLinkButton } from "./SavedLinks";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, mediaURL, type Recipe, dbKey } from "../api";
@@ -83,6 +84,7 @@ export default function RecipeView() {
             </div>
           )}
           <div className="actions">
+            <SaveLinkButton key={r.id} record={{ section: "cooking", kind: "favorite", title: r.name, target: "/recipes/" + r.id }} />
             <button className="btn btn-primary" onClick={() => setLogging(true)}>
               <Icon name="calendar" /> Log to diary
             </button>

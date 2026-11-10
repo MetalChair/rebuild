@@ -1,16 +1,18 @@
 <#
 .SYNOPSIS
-Builds a Windows x64 DietPro.exe with an embedded catalog from a local Diet Pro CSV export.
+Builds DietPro.exe with an embedded catalog from a local Diet Pro CSV export.
 .EXAMPLE
 ./scripts/build-portable.ps1 -CsvDir 'C:/DietPro/DietProExport' -ImagesDir 'C:/DietPro/Images'
 .NOTES
-Requires Go, Node.js, npm, and a local export of the legacy t_*.csv tables. The CSV files and generated database are never tracked by Git.
+Run on Windows with Go, Node.js, npm, and a local export of the legacy t_*.csv tables.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$CsvDir,
     [string]$ImagesDir,
-    [string]$Output = 'DietPro.exe'
+    [string]$Output = 'DietPro.exe',
+    [ValidateSet('amd64','arm64')][string]$Architecture = 'amd64',
+    [ValidatePattern('^[0-9A-Za-z.-]+$')][string]$Version = 'dev'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,6 +24,9 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) ('dietpro-build-' + [guid]::NewG
 $archive = Join-Path $repo 'catalog.db.gz'
 $importer = Join-Path $scratch 'importer.exe'
 $db = Join-Path $scratch 'catalog.db'
+$originalGoOS = $env:GOOS
+$originalGoArch = $env:GOARCH
+$originalCGO = $env:CGO_ENABLED
 
 function Check-Command {
     if ($LASTEXITCODE) { throw "Command failed with exit code $LASTEXITCODE." }
@@ -32,15 +37,18 @@ Push-Location $repo
 try {
     Push-Location web
     try {
-        npm ci
+        npm.cmd ci
         Check-Command
-        npm run build
+        npm.cmd run build
         Check-Command
     } finally {
         Pop-Location
     }
 
     $env:CGO_ENABLED = '0'
+    $env:GOOS = 'windows'
+    $env:GOARCH = (go env GOHOSTARCH)
+    Check-Command
     go build -o $importer .
     Check-Command
     $arguments = @('import', '-csv', $csv, '-db', $db)
@@ -55,13 +63,15 @@ try {
         finally { $compressed.Dispose() }
     } finally { $source.Dispose() }
 
-    $env:GOOS = 'windows'
-    $env:GOARCH = 'amd64'
-    go build -tags portable -trimpath -ldflags '-s -w -H=windowsgui' -o $target .
+    $env:GOARCH = $Architecture
+    go build -tags portable -trimpath -ldflags "-s -w -H=windowsgui -X main.version=$Version" -o $target .
     Check-Command
     Write-Output $target
 } finally {
     Pop-Location
+    $env:GOOS = $originalGoOS
+    $env:GOARCH = $originalGoArch
+    $env:CGO_ENABLED = $originalCGO
     foreach ($file in @($importer, $db, "$db-wal", "$db-shm")) {
         if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }
     }

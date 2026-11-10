@@ -14,6 +14,7 @@ import DiaryPage from "./pages/Diary";
 import ProfilesPage from "./pages/Profiles";
 import PhotographsPage from "./pages/Photographs";
 import MenusPage from "./pages/Menus";
+import SavedLinksPage from "./pages/SavedLinks";
 import ReferencePage from "./pages/Reference";
 import { Activities, Home, Help, Shopping, Internet, Inventory, Stores } from "./pages/Workspace";
 import "./workspace.css";
@@ -27,18 +28,19 @@ const SECTIONS = {
   Cooking: [
     ["Cookbooks", "/recipes", "▣"], ["Menus", "/menus", "▤"], ["Ingredients", "/foods", "▣"],
     ["Glossary", "/reference?tab=glossary", "▣"], ["Cooking Techniques", "/reference", "▣"],
+    ["Cooking Favorites", "/cooking/favorites", "☆"], ["Cooking Searches", "/cooking/searches", "⌕"],
   ],
   Shopping: [["Grocery Lists", "/shopping", "▣"], ["Inventory", "/inventory", "▤"], ["Stores", "/stores", "▣"]],
-  Exercise: [["Activities", "/activities", "▣"]],
+  Exercise: [["Activities", "/activities", "▣"], ["Exercise Favorites", "/exercise/favorites", "☆"], ["Exercise Searches", "/exercise/searches", "⌕"]],
   Internet: [["Internet Reference", "/internet", "▣"]],
 } as const;
 
 type Section = keyof typeof SECTIONS;
 
 function sectionFor(path: string): Section {
-  if (/^\/(recipes|foods|reference|menus)/.test(path)) return "Cooking";
+  if (/^\/(recipes|foods|reference|menus|cooking)/.test(path)) return "Cooking";
   if (["/shopping", "/inventory", "/stores"].includes(path)) return "Shopping";
-  if (path === "/activities") return "Exercise";
+  if (path === "/activities" || path.startsWith("/exercise/")) return "Exercise";
   if (path === "/internet") return "Internet";
   return "Profile";
 }
@@ -218,6 +220,10 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/activities" element={<Activities />} />
+            <Route path="/cooking/favorites" element={<SavedLinksPage key="cf" section="cooking" kind="favorite" />} />
+            <Route path="/cooking/searches" element={<SavedLinksPage key="cs" section="cooking" kind="search" />} />
+            <Route path="/exercise/favorites" element={<SavedLinksPage key="ef" section="exercise" kind="favorite" />} />
+            <Route path="/exercise/searches" element={<SavedLinksPage key="es" section="exercise" kind="search" />} />
             <Route path="/shopping" element={<Shopping />} />
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/stores" element={<Stores />} />

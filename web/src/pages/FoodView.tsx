@@ -1,3 +1,4 @@
+import { SaveLinkButton } from "./SavedLinks";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type Nutr } from "../api";
@@ -54,6 +55,7 @@ export default function FoodView() {
           </p>
         </div>
         <div className="actions">
+            <SaveLinkButton key={f.id} record={{ section: "cooking", kind: "favorite", title: f.name, target: "/foods/" + f.id }} />
           <Link className="btn" to={`/foods/${f.id}/edit`}>
             <Icon name="edit" /> Edit
           </Link>
