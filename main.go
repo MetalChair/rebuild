@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,7 +14,10 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 	"time"
 
 	"dietpro/internal/importer"
@@ -27,7 +31,7 @@ var version = "dev"
 const usage = `Diet Pro %s
 
 Usage:
-  dietpro [serve] [flags]     Start the web app (default)
+  dietpro [serve] [flags]     Start the web app (default); -dir <folder> serves every database in a folder
   dietpro import [flags]      Import a legacy Diet Pro CSV export into a new database
   dietpro version
 
@@ -37,6 +41,9 @@ Run "dietpro <command> -h" for flags.
 func main() {
 	log.SetFlags(0)
 	args := os.Args[1:]
+	if len(args) == 0 && launchPortableDefault() {
+		return
+	}
 	cmd := "serve"
 	if len(args) > 0 && args[0] != "" && args[0][0] != '-' {
 		cmd, args = args[0], args[1:]
@@ -101,27 +108,52 @@ func runImport(args []string) error {
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	dbPath := fs.String("db", "dietpro.db", "database file")
+	dir := fs.String("dir", "", "serve every Diet Pro database (*.db) in this folder, with a picker to switch (instead of -db)")
+	defaultDB := fs.String("default", "dietpro", "with -dir: the database selected first (file name without .db)")
 	addr := fs.String("addr", "127.0.0.1:7465", "listen address")
 	open := fs.Bool("open", false, "open the app in the default browser")
 	fs.Parse(args)
 
-	if _, err := os.Stat(*dbPath); errors.Is(err, os.ErrNotExist) {
-		log.Printf("Note: %s does not exist; starting with an empty database.", *dbPath)
-		log.Printf("      Run \"dietpro import -csv <export dir>\" to load legacy data.")
+	var dbs []server.Database
+	var err error
+	if *dir != "" {
+		dbSet := false
+		fs.Visit(func(f *flag.Flag) { dbSet = dbSet || f.Name == "db" })
+		if dbSet {
+			return errors.New("use either -db or -dir, not both")
+		}
+		dbs, err = openDir(*dir, *defaultDB)
+	} else {
+		if _, err := os.Stat(*dbPath); errors.Is(err, os.ErrNotExist) {
+			log.Printf("Note: %s does not exist; starting with an empty database.", *dbPath)
+			log.Printf("      Run \"dietpro import -csv <export dir>\" to load legacy data.")
+		}
+		var db *sql.DB
+		db, err = store.Open(*dbPath)
+		if err == nil {
+			dbs = []server.Database{{Name: dbName(*dbPath), DB: db}}
+		}
 	}
-	db, err := store.Open(*dbPath)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		for _, d := range dbs {
+			d.DB.Close()
+		}
+	}()
 
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{Handler: server.New(db, web.Dist()), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: server.NewMulti(dbs, web.Dist()), ReadHeaderTimeout: 10 * time.Second}
 	url := "http://" + ln.Addr().String()
-	log.Printf("Diet Pro %s serving %s at %s", version, *dbPath, url)
+	if *dir != "" {
+		log.Printf("Diet Pro %s serving %d databases from %s at %s", version, len(dbs), *dir, url)
+	} else {
+		log.Printf("Diet Pro %s serving %s at %s", version, *dbPath, url)
+	}
 	if *open {
 		openBrowser(url)
 	}
@@ -138,6 +170,54 @@ func serve(args []string) error {
 		return err
 	}
 	return nil
+}
+
+// openDir opens every Diet Pro database in dir, sorted by name with def first.
+// Files that aren't Diet Pro databases (other apps' SQLite files, anything
+// unreadable) are skipped with a message and never written to.
+func openDir(dir, def string) ([]server.Database, error) {
+	paths, err := filepath.Glob(filepath.Join(dir, "*.db"))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(paths)
+	var dbs []server.Database
+	for _, p := range paths {
+		if st, err := os.Stat(p); err != nil || !st.Mode().IsRegular() {
+			continue
+		}
+		if ok, err := store.IsDietPro(p); !ok {
+			reason := "not a Diet Pro database"
+			if err != nil {
+				reason = err.Error()
+			}
+			log.Printf("Skipping %s: %s", p, reason)
+			continue
+		}
+		db, err := store.Open(p)
+		if err != nil {
+			for _, d := range dbs {
+				d.DB.Close()
+			}
+			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		d := server.Database{Name: dbName(p), DB: db}
+		if d.Name == def {
+			dbs = append([]server.Database{d}, dbs...)
+		} else {
+			dbs = append(dbs, d)
+		}
+		log.Printf("Loaded %s", p)
+	}
+	if len(dbs) == 0 {
+		return nil, fmt.Errorf("no Diet Pro databases (*.db) found in %s", dir)
+	}
+	return dbs, nil
+}
+
+// dbName is how a database is labelled in the app: its file name without ".db".
+func dbName(path string) string {
+	return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 }
 
 func openBrowser(url string) {

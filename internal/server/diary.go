@@ -537,7 +537,7 @@ func (s *srv) listActivities(r *http.Request) (any, error) {
 		cond = " WHERE " + strings.Join(where, " AND ")
 	}
 	rows, err := s.db.QueryContext(r.Context(), `SELECT a.id, a.name, COALESCE(g.name,''), a.kcal_per_lb_minute
-		FROM activity a LEFT JOIN activity_group g ON g.id=a.group_id`+cond+` ORDER BY a.name LIMIT 60`, args...)
+		FROM activity a LEFT JOIN activity_group g ON g.id=a.group_id`+cond+` ORDER BY a.name LIMIT 1000`, args...)
 	if err != nil {
 		return nil, err
 	}

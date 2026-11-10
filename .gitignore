@@ -1,0 +1,15 @@
+# Frontend dependencies and build output (built by `make`, embedded into the Go binary)
+/web/node_modules/
+/web/dist/
+
+# Local build leftovers
+/dist/*.app/
+.DS_Store
+
+# Generated catalog and private local databases
+/catalog.db.gz
+/*.exe
+*.mdb
+*.db
+*.db-wal
+*.db-shm

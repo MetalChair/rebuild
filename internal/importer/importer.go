@@ -64,6 +64,7 @@ func Run(db *sql.DB, opt Options) error {
 		{"profiles & diary", im.diary},
 		{"activities", im.activities},
 		{"reference", im.reference},
+		{"workspace records", im.workspace},
 		{"images", func() error { return im.media(opt.ImagesDir) }},
 	}
 	for _, s := range steps {

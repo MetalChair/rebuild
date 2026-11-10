@@ -284,3 +284,74 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS grocery (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    quantity TEXT NOT NULL DEFAULT '',
+    checked INTEGER NOT NULL DEFAULT 0 CHECK (checked IN (0, 1))
+);
+CREATE TABLE IF NOT EXISTS menu (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    comments TEXT NOT NULL,
+    servings REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS menu_line (
+    id INTEGER PRIMARY KEY,
+    menu_id INTEGER NOT NULL REFERENCES menu(id) ON DELETE CASCADE,
+    idx INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    recipe_id INTEGER REFERENCES recipe(id) ON DELETE SET NULL,
+    food_id INTEGER REFERENCES food(id) ON DELETE SET NULL,
+    quantity TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pantry (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    quantity REAL NOT NULL CHECK (quantity >= 0),
+    unit TEXT NOT NULL,
+    comments TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS shopping_store (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    address TEXT NOT NULL,
+    comments TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS preference (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS grocery_list (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+);
+INSERT OR IGNORE INTO grocery_list(id, name) VALUES (1, 'Grocery List');
+CREATE TABLE IF NOT EXISTS grocery_list_item (
+    item_id INTEGER PRIMARY KEY REFERENCES grocery(id) ON DELETE CASCADE,
+    list_id INTEGER NOT NULL REFERENCES grocery_list(id)
+);
+CREATE INDEX IF NOT EXISTS grocery_list_item_by_list ON grocery_list_item(list_id);
+INSERT INTO grocery_list_item(item_id, list_id)
+SELECT id, 1 FROM grocery WHERE id NOT IN (SELECT item_id FROM grocery_list_item);
+
+CREATE TABLE IF NOT EXISTS profile_photo (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    caption TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    data BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS profile_photo_date ON profile_photo(profile_id, date, id);
+
+CREATE TABLE IF NOT EXISTS saved_link (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    section TEXT NOT NULL CHECK (section IN ('cooking', 'exercise')),
+    kind TEXT NOT NULL CHECK (kind IN ('favorite', 'search')),
+    title TEXT NOT NULL,
+    target TEXT NOT NULL,
+    UNIQUE (section, kind, target)
+);

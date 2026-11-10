@@ -6,6 +6,8 @@ import (
 	_ "embed"
 	"fmt"
 	"net/url"
+	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -17,6 +19,39 @@ var schema string
 // food can be logged by weight.
 const GramMeasureID = 99998
 
+// IsDietPro reports whether path is an existing Diet Pro database. It opens
+// the file read-only, so other applications' SQLite files are never modified.
+func IsDietPro(path string) (bool, error) {
+	dsn, err := databaseURI(path, url.Values{"mode": {"ro"}})
+	if err != nil {
+		return false, err
+	}
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+	var n int
+	err = db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('food','recipe','profile')`).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n == 3, nil
+}
+
+// databaseURI escapes directory names such as "Recipes #1" for the SQLite URI parser.
+func databaseURI(path string, params url.Values) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	slash := filepath.ToSlash(absolute)
+	if !strings.HasPrefix(slash, "/") {
+		slash = "/" + slash
+	}
+	return (&url.URL{Scheme: "file", Path: slash, RawQuery: params.Encode()}).String(), nil
+}
+
 // Open opens (creating if necessary) the database at path and applies the schema.
 func Open(path string) (*sql.DB, error) {
 	q := url.Values{}
@@ -24,7 +59,11 @@ func Open(path string) (*sql.DB, error) {
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "busy_timeout(5000)")
 	q.Add("_pragma", "synchronous(NORMAL)")
-	db, err := sql.Open("sqlite", "file:"+path+"?"+q.Encode())
+	dsn, err := databaseURI(path, q)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
